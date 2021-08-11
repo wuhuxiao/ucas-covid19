@@ -7,7 +7,6 @@ import os
 import json
 import pytz
 import hashlib
-import smtplib
 import requests
 from time import sleep
 from pathlib import Path
@@ -22,31 +21,10 @@ debug = False
 # 忽略网站的证书错误，这很不安全 :(
 verify_cert = True
 
-# 全局变量，如果使用自己的服务器运行请根据需要修改 ->以下变量<-
-user = "USERNAME"  # sep 账号
-passwd = r"PASSWORD"  # sep 密码
-api_key = "API_KEY"  # 可选， server 酱的通知 api key
-
-# 可选，如果需要邮件通知，那么修改下面五行 :)
-smtp_port = "SMTP_PORT"
-smtp_server = "SMTP_SERVER"
-sender_email = "SENDER_EMAIL"
-sender_email_passwd = r"SENDER_EMAIL_PASSWD"
-receiver_email = "RECEIVER_EMAIL"
-
-# 全局变量，使用自己的服务器运行请根据需要修改 ->以上变量<-
-
-# 如果检测到程序在 github actions 内运行，那么读取环境变量中的登录信息
-if os.environ.get('GITHUB_RUN_ID', None):
+if os.environ.get('SEP_USER_NAME', None):
     user = os.environ.get('SEP_USER_NAME', '')  # sep账号
     passwd = os.environ.get('SEP_PASSWD', '')  # sep密码
     api_key = os.environ.get('API_KEY', '')  # server酱的api，填了可以微信通知打卡结果，不填没影响
-
-    smtp_port = os.environ.get('SMTP_PORT', '465')  # 邮件服务器端口，默认为qq smtp服务器端口
-    smtp_server = os.environ.get('SMTP_SERVER', 'smtp.qq.com')  # 邮件服务器，默认为qq smtp服务器
-    sender_email = os.environ.get('SENDER_EMAIL', 'example@example.com')  # 发送通知打卡通知邮件的邮箱
-    sender_email_passwd = os.environ.get('SENDER_EMAIL_PASSWD', "password")  # 发送通知打卡通知邮件的邮箱密码
-    receiver_email = os.environ.get('RECEIVER_EMAIL', 'example@example.com')  # 接收打卡通知邮件的邮箱
 
 
 def login(s: requests.Session, username, password, cookie_file: Path):
@@ -70,18 +48,20 @@ def login(s: requests.Session, username, password, cookie_file: Path):
     }
     r = s.post("https://app.ucas.ac.cn/uc/wap/login/check", data=payload)
 
-    # print(r.text)
+    print(r.text)
     if r.json().get('m') != "操作成功":
         print("登录失败")
-        message(api_key, sender_email, sender_email_passwd, receiver_email, "健康打卡登录失败", "登录失败")
+        message(api_key, "健康打卡登录失败", "登录失败")
 
     else:
-        cookie_file.write_text(json.dumps(requests.utils.dict_from_cookiejar(r.cookies), indent=2), encoding='utf-8', )
+        cookie_file.write_text(json.dumps(requests.utils.dict_from_cookiejar(
+            r.cookies), indent=2), encoding='utf-8', )
         print("登录成功，cookies 保存在文件 {}，下次登录将优先使用cookies".format(cookie_file))
 
 
 def get_daily(s: requests.Session):
-    daily = s.get("https://app.ucas.ac.cn/ncov/api/default/daily?xgh=0&app_id=ucas")
+    daily = s.get(
+        "https://app.ucas.ac.cn/ncov/api/default/daily?xgh=0&app_id=ucas")
     # info = s.get("https://app.ucas.ac.cn/ncov/api/default/index?xgh=0&app_id=ucas")
     if '操作成功' not in daily.text:
         # 会话无效，跳转到了登录页面
@@ -92,62 +72,33 @@ def get_daily(s: requests.Session):
     return j.get('d') if j.get('d', False) else False
 
 
+###
+
+
 def submit(s: requests.Session, old: dict):
     new_daily = {
-        'realname': old['realname'],
-        'number': old['number'],
+        'realname': old['realname'],  # 姓名
+        'number': old['number'],  # 学工号
         'szgj_api_info': old['szgj_api_info'],
-        # 'szgj': old['szgj'],# 2021.8.1 del
-        # 'old_sfzx': old['sfzx'],# 2021.8.1 del
-        'sfzx': old['sfzx'],
-        'szdd': old['szdd'],
+        'sfzx': old['sfzx'],  # 是否在校
+        'szdd': old['szdd'],  # 所在地点
         'ismoved': 0,  # 如果前一天位置变化这个值会为1，第二天仍然获取到昨天的1，而事实上位置是没变化的，所以置0
-        # 'ismoved': old['ismoved'],
-        'tw': old['tw'],
-        # 'bztcyy': old['bztcyy'], # 2021.8.1 del
-        # 'sftjwh': old['sfsfbh'],  # 2020.9.16 del
-        # 'sftjhb': old['sftjhb'],  # 2020.9.16 del
+        'tw': old['tw'],  # 体温
         'sfcxtz': old['sfcxtz'],
-        # 'sfyyjc': old['sfyyjc'],# 2021.8.1 del
-        # 'jcjgqr': old['jcjgqr'],# 2021.8.1 del
-        # 'sfjcwhry': old['sfjcwhry'],  # 2020.9.16 del
-        # 'sfjchbry': old['sfjchbry'],  # 2020.9.16 del
         'sfjcbh': old['sfjcbh'],  # 是否接触病患
-        # 'jcbhlx': old['jcbhlx'], # 2021.1.29 del 接触病患类型
         'sfcyglq': old['sfcyglq'],  # 是否处于隔离期
-        # 'gllx': old['gllx'],   # 2021.1.29 del 隔离类型
         'sfcxzysx': old['sfcxzysx'],
-        # 'old_szdd': old['szdd'],# 2021.8.1 del
         'geo_api_info': old['old_city'],  # 保持昨天的结果
         'old_city': old['old_city'],
         'geo_api_infot': old['geo_api_infot'],
         'date': datetime.now(tz=pytz.timezone("Asia/Shanghai")).strftime("%Y-%m-%d"),
-        # 'fjsj': old['fjsj'],  # 返京时间# 2021.8.1 del
-        # 'ljrq': old['ljrq'],  # 离京日期 add@2021.1.24# 2021.8.1 del
-        # 'qwhd': old['qwhd'],  # 去往何地 add@2021.1.24# 2021.8.1 del
-        # 'chdfj': old['chdfj'],  # 从何地返京 add@2021.1.24# 2021.8.1 del
-        # 'jcbhrq': old['jcbhrq'], # del 2021.1.29 接触病患日期
-        # 'glksrq': old['glksrq'], # del 2021.1.29 隔离开始日期
-        # 'fxyy': old['fxyy'],# 2021.8.1 del
-        # 'jcjg': old['jcjg'],# 2021.8.1 del
-        # 'jcjgt': old['jcjgt'],# 2021.8.1 del
-        # 'qksm': old['qksm'],# 2021.8.1 del
-        # 'remark': old['remark'],
         'jcjgqk': old['jcjgqk'],
-        # 'jcwhryfs': old['jcwhryfs'],# 2021.8.1 del
-        # 'jchbryfs': old['jchbryfs'],# 2021.8.1 del
-        'gtshcyjkzt': old['gtshcyjkzt'],  # add @2020.9.16
-        'jrsfdgzgfxdq': old['jrsfdgzgfxdq'],  # add @2020.9.16
-        'jrsflj': old['jrsflj'],  # add @2020.9.16
+        'gtshcyjkzt': old['gtshcyjkzt'],
+        'jrsfdgzgfxdq': old['jrsfdgzgfxdq'],
+        'jrsflj': '是',
+        'qwhd': '21级新生, 未报到',
         'app_id': 'ucas'
     }
-
-    check_data_msg = check_submit_data(new_daily)  # 检查上报结果
-    if check_data_msg is not None:
-        message(api_key, sender_email, sender_email_passwd, receiver_email, "每日健康打卡-{}".format(check_data_msg),
-                "{}".format(new_daily))
-        print("提交数据存在问题，请手动打卡，问题原因： {}".format(check_data_msg))
-        return
 
     r = s.post("https://app.ucas.ac.cn/ncov/api/default/save", data=new_daily)
     if debug:
@@ -162,70 +113,17 @@ def submit(s: requests.Session, old: dict):
     else:
         print("打卡失败，错误信息: ", r.json().get("m"))
 
-    message(api_key, sender_email, sender_email_passwd, receiver_email, result.get('m'), new_daily)
+    message(api_key, result.get('m'), new_daily)
 
 
-def check_submit_data(data: dict):
-    """
-    检查提交数据是否正常
-    """
-    msg = []
-    # 所在地点
-    if data['szdd'] != "国内":
-        msg.append("所在地点不是国内，请手动填报")
-
-    # 体温
-    if int(data['tw']) > 4:
-        msg.append("体温大于 37.3 度 ，请手动填报")
-
-    if data['jrsflj'] == '是':
-        msg.append("近日有离京经历，请手动填报")
-
-    return ";".join(msg) if msg else None
-
-
-def message(key, sender, mail_passwd, receiver, subject, msg):
-    """
-    再封装一下 :) 减少调用通知写的代码
-    """
-    if api_key != "":
-        server_chan_message(key, subject, msg)
-    if sender_email != "" and receiver_email != "":
-        send_email(sender, mail_passwd, receiver, subject, msg)
-
-
-def server_chan_message(key, title, body):
+def message(key, title, msg):
     """
     微信通知打卡结果
     """
     # 错误的key也可以发送消息，无需处理 :)
-    msg_url = "https://sctapi.ftqq.com/{}.send?text={}&desp={}".format(key, title, body)
+    msg_url = "https://push.bot.qw360.cn/send/{}?msg=[{}]{}".format(
+        key, title, msg)
     requests.get(msg_url)
-
-
-def send_email(sender, mail_passwd, receiver, subject, msg):
-    """
-    邮件通知打卡结果
-    """
-    try:
-        body = MIMEText(str(msg), 'plain', 'utf-8')
-        body['From'] = formataddr(["notifier", sender])
-        body['To'] = formataddr(["me", receiver])
-        body['Subject'] = "UCAS疫情填报助手通知-" + subject
-
-        global smtp_port, smtp_server
-        if smtp_server == "" or smtp_port == "":
-            smtp_port = 465
-            smtp_server = "smtp.qq.com"
-        smtp = smtplib.SMTP_SSL(smtp_server, smtp_port)
-        smtp.login(sender, mail_passwd)
-        smtp.sendmail(sender, receiver, body.as_string())
-        smtp.quit()
-        print("邮件发送成功")
-    except Exception as ex:
-        print("邮件发送失败")
-        if debug:
-            print(ex)
 
 
 def report(username, password):
@@ -238,14 +136,15 @@ def report(username, password):
     }
     s.headers.update(header)
 
-    print(datetime.now(tz=pytz.timezone("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S %Z"))
-    for i in range(randint(10, 600), 0, -1):
-        print("\r等待{}秒后填报".format(i), end='')
-        sleep(1)
+    print(datetime.now(tz=pytz.timezone("Asia/Shanghai")
+                       ).strftime("%Y-%m-%d %H:%M:%S %Z"))
 
-    cookie_file_name = Path("{}.json".format(hashlib.sha512(username.encode()).hexdigest()[:8]))
+    cookie_file_name = Path("{}.json".format(
+        hashlib.sha512(username.encode()).hexdigest()[:8]))
+
     login(s, username, password, cookie_file_name)
     yesterday = get_daily(s)
+    print(yesterday)
     submit(s, yesterday)
 
 
