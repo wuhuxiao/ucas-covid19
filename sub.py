@@ -28,9 +28,6 @@ if os.environ.get('SEP_USER_NAME', None):
 
 
 def login(s: requests.Session, username, password, cookie_file: Path):
-    # r = s.get(
-    #     "https://app.ucas.ac.cn/uc/wap/login?redirect=https%3A%2F%2Fapp.ucas.ac.cn%2Fsite%2FapplicationSquare%2Findex%3Fsid%3D2")
-    # print(r.text)
 
     if cookie_file.exists():
         cookie = json.loads(cookie_file.read_text(encoding='utf-8'))
@@ -48,11 +45,9 @@ def login(s: requests.Session, username, password, cookie_file: Path):
     }
     r = s.post("https://app.ucas.ac.cn/uc/wap/login/check", data=payload)
 
-    print(r.text)
     if r.json().get('m') != "操作成功":
         print("登录失败")
         message(api_key, "健康打卡登录失败", "登录失败")
-
     else:
         cookie_file.write_text(json.dumps(requests.utils.dict_from_cookiejar(
             r.cookies), indent=2), encoding='utf-8', )
@@ -72,9 +67,6 @@ def get_daily(s: requests.Session):
     return j.get('d') if j.get('d', False) else False
 
 
-###
-
-
 def submit(s: requests.Session, old: dict):
     new_daily = {
         'realname': old['realname'],  # 姓名
@@ -88,15 +80,20 @@ def submit(s: requests.Session, old: dict):
         'sfjcbh': old['sfjcbh'],  # 是否接触病患
         'sfcyglq': old['sfcyglq'],  # 是否处于隔离期
         'sfcxzysx': old['sfcxzysx'],
+        'old_szdd': old['old_szdd'],
         'geo_api_info': old['old_city'],  # 保持昨天的结果
         'old_city': old['old_city'],
         'geo_api_infot': old['geo_api_infot'],
         'date': datetime.now(tz=pytz.timezone("Asia/Shanghai")).strftime("%Y-%m-%d"),
+        'fjsj': old['fjsj'],
+        'remark': '21级新生, 未报到',
+        'jrsflj': '是',  # 近日是否离京
         'jcjgqk': old['jcjgqk'],
-        'gtshcyjkzt': old['gtshcyjkzt'],
+        'ljrq': old['ljrq'],
+        'qwhd': old['qwhd'],
+        'chdfj': old['chdfj'],
         'jrsfdgzgfxdq': old['jrsfdgzgfxdq'],
-        'jrsflj': '是',
-        'qwhd': '21级新生, 未报到',
+        'gtshcyjkzt': old['gtshcyjkzt'],
         'app_id': 'ucas'
     }
 
@@ -145,7 +142,6 @@ def report(username, password):
 
     login(s, username, password, cookie_file_name)
     yesterday = get_daily(s)
-    print(yesterday)
     submit(s, yesterday)
 
 
