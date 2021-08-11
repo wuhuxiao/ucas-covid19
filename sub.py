@@ -121,9 +121,10 @@ def message(key, title, msg):
     微信通知打卡结果
     """
     # 错误的key也可以发送消息，无需处理 :)
-    msg_url = "https://push.bot.qw360.cn/send/{}?msg=[{}]{}".format(
-        key, title, msg)
-    requests.get(msg_url)
+    if key is not None:
+        msg_url = "https://push.bot.qw360.cn/send/{}?msg=[{}]{}".format(
+            key, title, msg)
+        requests.get(msg_url)
 
 
 def report(username, password):
