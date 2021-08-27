@@ -83,11 +83,12 @@ def submit(s: requests.Session, old: dict):
         'old_szdd': old['old_szdd'],
         'geo_api_info': old['old_city'],  # 保持昨天的结果
         'old_city': old['old_city'],
+        'sfzx': old['sfzx'],  # 是否在校
         'geo_api_infot': old['geo_api_infot'],
         'date': datetime.now(tz=pytz.timezone("Asia/Shanghai")).strftime("%Y-%m-%d"),
         'fjsj': old['fjsj'],
-        'remark': '21级新生, 未报到',
-        'jrsflj': '是',  # 近日是否离京
+        'remark': '21级新生',
+        'jrsflj': '否',  # 近日是否离京
         'jcjgqk': old['jcjgqk'],
         'ljrq': old['ljrq'],
         'qwhd': old['qwhd'],
