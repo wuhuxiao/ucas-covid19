@@ -87,7 +87,7 @@ def submit(s: requests.Session, old: dict):
         'geo_api_infot': old['geo_api_infot'],
         'date': datetime.now(tz=pytz.timezone("Asia/Shanghai")).strftime("%Y-%m-%d"),
         'fjsj': old['fjsj'],
-        'remark': '21级新生',
+        'remark': '定位出错，人在雁栖湖校区',
         'jrsflj': '否',  # 近日是否离京
         'jcjgqk': old['jcjgqk'],
         'ljrq': old['ljrq'],
